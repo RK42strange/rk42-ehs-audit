@@ -31,14 +31,14 @@ export default function HazardCapturePage() {
         const filePath = `${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("audit-photos")
+          .from("hazards")
           .upload(filePath, file);
 
         if (uploadError) throw uploadError;
 
         // Get public URL
         const { data: publicUrlData } = supabase.storage
-          .from("audit-photos")
+          .from("hazards")
           .getPublicUrl(filePath);
 
         photoUrl = publicUrlData.publicUrl;
