@@ -12,8 +12,10 @@ export async function POST(req: Request) {
     const bytes = await file.arrayBuffer();
     const base64Image = Buffer.from(bytes).toString("base64");
 
-    // Call the local plant server running Llama 3.2 Vision air-gapped
-    const localRes = await fetch("http://localhost:11434/api/chat", {
+    // REPLACE WITH YOUR COMPUTER'S LOCAL IP ADDRESS FOUND IN STEP 2
+    const LOCAL_IP = "192.168.56.1"; 
+
+    const localRes = await fetch(`http://${LOCAL_IP}:11434/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
