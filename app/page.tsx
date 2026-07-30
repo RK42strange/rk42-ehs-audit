@@ -2,11 +2,6 @@
 
 import { useState, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-// Transformers.js for client-side browser AI execution
-import { pipeline, env } from "@huggingface/transformers";
-
-// Configure environment for browser execution
-env.allowLocalModels = false;
 
 const SUPABASE_URL = "https://hkuaavitsubnzkfcrqpr.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_6_2M4HyHMJ567ki4PEwwXQ_Hd56or6l";
@@ -14,23 +9,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function HazardCapturePage() {
   const [description, setDescription] = useState("");
-  const [riskLevel, setRiskLevel] = useState("Medium");
+  const [riskLevel, setRiskLevel] = useState("High");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Singleton loader for the browser-based vision model
-  const loadClientModel = async () => {
-    // We use a lightweight vision-language model optimized for edge/browser
-    // e.g., 'onnx-community/Moondream2' or similar quantized weights
-    const classifier = await pipeline('image-to-text', 'onnx-community/moondream2-onnx', {
-      device: 'webgpu', // Uses phone's GPU locally! Falls back to WASM if unavailable
-    });
-    return classifier;
-  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -43,26 +28,27 @@ export default function HazardCapturePage() {
 
     setAnalyzing(true);
     try {
-      // 1. Load and run model entirely locally in the browser memory
-      const visionModel = await loadClientModel();
-      
-      // 2. Prompt the local model with the image URL
-      const output = await visionModel(objectUrl, {
-        prompt: "Describe this workplace safety hazard concisely and state whether risk is Low, Medium, or High.",
+      const formData = new FormData();
+      formData.append("image", selectedFile);
+
+      const res = await fetch("/api/analyze-hazard", {
+        method: "POST",
+        body: formData,
       });
 
-      const analysisText = Array.isArray(output) ? output[0]?.generated_text : (output as any)?.generated_text;
+      if (!res.ok) throw new Error("Local plant gateway communication failed");
 
-      if (analysisText) {
-        setDescription(analysisText);
-        // Simple heuristic parser for risk level from local model output
-        if (analysisText.toLowerCase().includes("high")) setRiskLevel("High");
-        else if (analysisText.toLowerCase().includes("low")) setRiskLevel("Low");
+      const data = await res.json();
+      if (data.analysis) {
+        setDescription(data.analysis);
+        const lower = data.analysis.toLowerCase();
+        if (lower.includes("high")) setRiskLevel("High");
+        else if (lower.includes("low")) setRiskLevel("Low");
         else setRiskLevel("Medium");
       }
     } catch (err) {
-      console.error("Local browser AI execution error:", err);
-      // Fallback allows manual entry if device hardware lacks WebGPU/WASM support
+      console.error("Local plant AI analysis error:", err);
+      setDescription("Failed to generate local AI summary. Please fill in manually.");
     } finally {
       setAnalyzing(false);
     }
@@ -77,7 +63,6 @@ export default function HazardCapturePage() {
       setSuccessMsg("");
       let photoUrl = "";
 
-      // 1. Upload photo to Supabase Storage 'hazards' bucket
       if (file) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}.${fileExt}`;
@@ -95,7 +80,6 @@ export default function HazardCapturePage() {
         photoUrl = publicUrlData.publicUrl;
       }
 
-      // 2. Insert record into database table 'audit_reports'
       const { error: dbError } = await supabase.from("audit_reports").insert([
         {
           hazard_description: description,
@@ -107,7 +91,7 @@ export default function HazardCapturePage() {
 
       if (dbError) throw dbError;
 
-      setSuccessMsg("⚡ EHS Hazard Logged Locally & Synced!");
+      setSuccessMsg("⚡ EHS Incident Report Logged via Local Plant Gateway!");
       setDescription("");
       setFile(null);
       setPreviewUrl(null);
@@ -119,24 +103,29 @@ export default function HazardCapturePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center p-4 sm:p-6 selection:bg-emerald-500 selection:text-slate-950">
-      <div className="w-full max-w-md mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
+    <main style={{ minHeight: "100vh", backgroundColor: "#020617", color: "#f8fafc", padding: "24px 16px", display: "flex", flexDirection: "column", alignItems: "center", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      
+      {/* Header */}
+      <div style={{ width: "100%", maxWidth: "500px", marginBottom: "24px", display: "flex", alignItems: "center", justifyContent: "between", borderBottom: "1px solid #1e293b", paddingBottom: "16px" }}>
         <div>
-          <span className="text-xs font-semibold tracking-wider text-emerald-400 uppercase bg-emerald-950/60 px-2 py-1 rounded border border-emerald-800/50">
-            Plant EHS • Air-Gapped Mode
+          <span style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#34d399", backgroundColor: "#064e3b", padding: "4px 8px", borderRadius: "6px", border: "1px solid #065f46" }}>
+            Plant EHS • Air-Gapped Gateway
           </span>
-          <h1 className="text-2xl font-black tracking-tight text-white mt-1">
+          <h1 style={{ fontSize: "24px", fontWeight: "900", color: "#ffffff", margin: "8px 0 0 0", letterSpacing: "-0.025em" }}>
             Edge Intelligence
           </h1>
         </div>
-        <div className="h-10 w-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+        <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", display: "flex", alignItems: "center", justifyContent: "center", color: "#34d399", fontWeight: "bold", fontSize: "14px" }}>
           RK
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-5 bg-slate-900/80 backdrop-blur border border-slate-800 p-5 rounded-2xl shadow-2xl">
+      {/* Form Container */}
+      <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: "500px", display: "flex", flexDirection: "column", gap: "20px", backgroundColor: "#0f172a", border: "1px solid #1e293b", padding: "24px", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)" }}>
+        
+        {/* Step 1 */}
         <div>
-          <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase mb-2">
+          <label style={{ display: "block", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: "8px" }}>
             1. Secure Local Capture
           </label>
           
@@ -146,24 +135,22 @@ export default function HazardCapturePage() {
             capture="environment"
             ref={fileInputRef}
             onChange={handleFileChange}
-            className="hidden"
+            style={{ display: "none" }}
           />
 
           {previewUrl ? (
-            <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-950 group">
-              <img src={previewUrl} alt="Hazard Preview" className="w-full h-48 object-cover opacity-90" />
+            <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", border: "1px solid #334155", backgroundColor: "#020617" }}>
+              <img src={previewUrl} alt="Hazard Preview" style={{ width: "100%", height: "220px", objectFit: "cover", opacity: 0.9 }} />
               {analyzing && (
-                <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center space-y-2">
-                  <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-xs font-semibold text-emerald-400 tracking-wide animate-pulse">
-                    Running On-Device AI Model...
-                  </p>
+                <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(2, 6, 23, 0.85)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                  <div style={{ width: "24px", height: "24px", border: "2px solid #34d399", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></div>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "#34d399", margin: 0 }}>Analyzing via Local Plant Server...</p>
                 </div>
               )}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-3 right-3 bg-slate-900/90 hover:bg-slate-800 text-slate-200 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 shadow transition"
+                style={{ position: "absolute", bottom: "12px", right: "12px", backgroundColor: "#0f172a", color: "#f1f5f9", fontSize: "11px", fontWeight: "500", padding: "6px 12px", borderRadius: "8px", border: "1px solid #334155", cursor: "pointer" }}
               >
                 Retake Photo
               </button>
@@ -172,79 +159,80 @@ export default function HazardCapturePage() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full h-40 border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl flex flex-col items-center justify-center space-y-2 bg-slate-950/50 hover:bg-emerald-950/10 transition group"
+              style={{ width: "100%", height: "140px", border: "2px dashed #334155", borderRadius: "12px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", backgroundColor: "rgba(2, 6, 23, 0.5)", cursor: "pointer", transition: "border-color 0.2s" }}
             >
-              <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 group-hover:border-emerald-500/50 flex items-center justify-center text-emerald-400 shadow-inner">
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", backgroundColor: "#020617", border: "1px solid #334155", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>
                 🔒
               </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-slate-200">Tap to Scan Locally</p>
-                <p className="text-xs text-slate-500 mt-0.5">Processed 100% on-device (Zero data leaks)</p>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: "13px", fontWeight: "500", color: "#f1f5f9", margin: 0 }}>Tap to Scan Incident</p>
+                <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0 0" }}>Processed 100% on local plant network</p>
               </div>
             </button>
           )}
         </div>
 
+        {/* Step 2 */}
         <div>
-          <div className="flex justify-between items-center mb-2">
-            <label className="text-xs font-bold tracking-wider text-slate-400 uppercase">
-              2. On-Device AI Summary
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <label style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8" }}>
+              2. Local AI Incident Report
             </label>
-            {analyzing && <span className="text-[10px] text-emerald-400 animate-pulse">Local computing...</span>}
+            {analyzing && <span style={{ fontSize: "10px", color: "#34d399" }}>Generating report...</span>}
           </div>
           <textarea
-            rows={3}
+            rows={7}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Model text will populate locally or type manually..."
-            className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-600 text-sm focus:outline-none focus:border-emerald-500 transition"
+            placeholder="Detailed incident analysis will populate here..."
+            style={{ width: "100%", padding: "12px", borderRadius: "10px", backgroundColor: "#020617", border: "1px solid #1e293b", color: "#f8fafc", fontSize: "12px", fontFamily: "monospace", outline: "none", lineHeight: "1.5", boxSizing: "border-box" }}
           />
         </div>
 
+        {/* Step 3 */}
         <div>
-          <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase mb-2">
+          <label style={{ display: "block", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginBottom: "8px" }}>
             3. Risk Classification Level
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            {["Low", "Medium", "High"].map((level) => (
-              <button
-                type="button"
-                key={level}
-                onClick={() => setRiskLevel(level)}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition ${
-                  riskLevel === level
-                    ? level === "High"
-                      ? "bg-rose-500/20 border-rose-500 text-rose-400 shadow-lg shadow-rose-950/50"
-                      : level === "Medium"
-                      ? "bg-amber-500/20 border-amber-500 text-amber-400 shadow-lg shadow-amber-950/50"
-                      : "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-950/50"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
-                }`}
-              >
-                {level} Risk
-              </button>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+            {["Low", "Medium", "High"].map((level) => {
+              const isSelected = riskLevel === level;
+              let bg = "#020617";
+              let border = "#1e293b";
+              let color = "#94a3b8";
+
+              if (isSelected) {
+                if (level === "High") { bg = "rgba(244, 63, 94, 0.15)"; border = "#f43f5e"; color = "#fb7185"; }
+                else if (level === "Medium") { bg = "rgba(245, 158, 11, 0.15)"; border = "#f59e0b"; color = "#fbbf24"; }
+                else { bg = "rgba(16, 185, 129, 0.15)"; border = "#10b981"; color = "#34d399"; }
+              }
+
+              return (
+                <button
+                  type="button"
+                  key={level}
+                  onClick={() => setRiskLevel(level)}
+                  style={{ padding: "10px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", backgroundColor: bg, border: `1px solid ${border}`, color: color, cursor: "pointer", transition: "all 0.2s" }}
+                >
+                  {level} Risk
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        {/* Submit */}
         <button
           type="submit"
           disabled={uploading || analyzing}
-          className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-950/50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+          style={{ width: "100%", padding: "14px", backgroundColor: "#10b981", color: "#020617", fontWeight: "800", fontSize: "14px", borderRadius: "10px", border: "none", cursor: "pointer", boxShadow: "0 10px 15px -3px rgba(16, 185, 129, 0.3)", opacity: (uploading || analyzing) ? 0.5 : 1 }}
         >
-          {uploading ? (
-            <>
-              <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-              <span>Syncing Report...</span>
-            </>
-          ) : (
-            <span>Submit Hazard Report →</span>
-          )}
+          {uploading ? "Syncing Report..." : "Submit Incident Report →"}
         </button>
 
         {successMsg && (
-          <div className="p-3 bg-emerald-950/60 border border-emerald-800 rounded-xl text-center">
-            <p className="text-emerald-400 text-xs font-semibold">{successMsg}</p>
+          <div style={{ padding: "12px", backgroundColor: "rgba(6, 78, 59, 0.6)", border: "1px solid #065f46", borderRadius: "10px", textAlign: "center" }}>
+            <p style={{ color: "#34d399", fontSize: "12px", fontWeight: "600", margin: 0 }}>{successMsg}</p>
           </div>
         )}
       </form>
