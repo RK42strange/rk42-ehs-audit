@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const base64Image = Buffer.from(bytes).toString("base64");
 
     // REPLACE WITH YOUR COMPUTER'S LOCAL IP ADDRESS FOUND IN STEP 2
-    const LOCAL_IP = "192.168.1.9"; 
+    const LOCAL_IP = "192.168.1.15"; 
 
     const localRes = await fetch(`http://${LOCAL_IP}:11434/api/chat`, {
       method: "POST",
