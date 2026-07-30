@@ -15,20 +15,20 @@ export async function POST(req: Request) {
     // REPLACE WITH YOUR COMPUTER'S LOCAL IP ADDRESS FOUND IN STEP 2
     const LOCAL_IP = "192.168.1.9"; 
 
-    const localRes = await fetch(`http://127.0.0.1:11434/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "minicpm-v", // <-- Updated here
+    const localRes = await fetch("http://192.168.1.9:11434/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+        model: "minicpm-v",
         messages: [
-          {
+        {
             role: "user",
             content: "Analyze this workplace hazard photo for an EHS plant audit. Return a structured response with: 1) Incident Summary, 2) Risk Level (High/Medium/Low), and 3) Immediate Recommended Actions.",
             images: [base64Image]
-          }
+        }
         ],
         stream: false
-      }),
+    }),
     });
 
     if (!localRes.ok) throw new Error("Local plant AI server communication failed");
